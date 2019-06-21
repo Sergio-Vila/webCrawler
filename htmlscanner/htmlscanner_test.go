@@ -1,6 +1,7 @@
 package htmlscanner
 
 import (
+    "bytes"
     "fmt"
     "github.com/stretchr/testify/assert"
     "io/ioutil"
@@ -209,4 +210,68 @@ func TestHtmlScanner_Scan(t *testing.T) {
     }
 
     fmt.Printf("Ran %d tests from %d test suites\n", numTestsRan, numTestSuitesRan)
+}
+
+var title = ""
+var lastLink = ""
+
+func benchmarkHtmlScanner_Scan(fileName string, b *testing.B) {
+
+    numLinks := 0
+
+    scanner := New()
+
+    scanOutputCh := make(chan crawler.Message)
+
+    fileStr, err := ioutil.ReadFile(fileName)
+    if err != nil {
+        b.Fatalf("Error opening file '%s': %s", fileName, err.Error());
+    }
+
+    for n := 0; n < b.N; n++ {
+
+        b.StopTimer()
+
+        numLinks = 0
+
+        docReader := crawler.DocReader {
+            DocId: crawler.Id(fileName),
+            Reader: ioutil.NopCloser(bytes.NewReader(fileStr)),
+        }
+
+        b.StartTimer()
+
+        go scanner.Scan(docReader, scanOutputCh)
+
+    loopOverMessages:
+        for {
+            msg := <-scanOutputCh
+
+            switch msg.Type {
+            case crawler.Title:
+                title = msg.Content
+
+            case crawler.Link:
+                numLinks++
+                lastLink = msg.Content
+
+            case crawler.EndOfStream:
+                break loopOverMessages
+            }
+        }
+
+    }
+
+    fmt.Printf("%d links\n", numLinks)
+    close(scanOutputCh)
+}
+
+func BenchmarkHtmlScanner_Scan_GoReleaseNotes(b *testing.B) {
+    benchmarkHtmlScanner_Scan("./testdata/go1.html", b)
+}
+
+// The Spring Championship Of Online Poker Wikipedia page is
+// currently the longest page of Wikipedia
+func BenchmarkHtmlScanner_Scan_WikipediaScoop(b *testing.B) {
+    benchmarkHtmlScanner_Scan("./testdata/wikipediascoop.html", b)
 }
