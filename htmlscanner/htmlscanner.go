@@ -7,6 +7,8 @@ import (
     "webCrawler/crawler"
 )
 
+const linksPerMsg = 20
+
 type HtmlScanner struct {}
 
 func New() crawler.DocScanner {
@@ -45,7 +47,7 @@ loopOverTokens:
                             zap.String("Title", title))
 
                         outCh <- crawler.Message{
-                            Content: title,
+                            Content: []string{title},
                             DocId: docId,
                             Type: crawler.Title,
                         }
@@ -68,6 +70,8 @@ loopOverTokens:
 
 func findLinks(token *html.Tokenizer, docId crawler.Id, linksCh chan crawler.Message, logger *zap.Logger) {
 
+    unsentLinks := make([]string, 0, linksPerMsg)
+
 loopOverTokens:
     for {
         switch token.Next() {
@@ -87,10 +91,18 @@ loopOverTokens:
                                 zap.String("Doc", string(docId)),
                                 zap.String("Link", link))
 
-                            linksCh <- crawler.Message{
-                                Content: link,
-                                DocId: docId,
-                                Type: crawler.Link,
+                            if len(unsentLinks) < linksPerMsg {
+                                unsentLinks = append(unsentLinks, link)
+                            }
+
+                            if len(unsentLinks) == linksPerMsg {
+                                linksCh <- crawler.Message{
+                                    Content: unsentLinks,
+                                    DocId:   docId,
+                                    Type:    crawler.Link,
+                                }
+
+                                unsentLinks = make([]string, 0, linksPerMsg)
                             }
 
                             break loopOverAttributes
@@ -107,5 +119,13 @@ loopOverTokens:
                 }
         }
 
+    }
+
+    if len(unsentLinks) != 0 {
+        linksCh <- crawler.Message{
+            Content: unsentLinks,
+            DocId:   docId,
+            Type:    crawler.Link,
+        }
     }
 }

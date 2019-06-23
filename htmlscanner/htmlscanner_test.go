@@ -79,6 +79,55 @@ var linksTests = docscanTestSuite{"Tests for links", []docscanTest{
         []string{"/resource1", "/resource2?query#pos"},
     },
     {
+        "multiple valid links",
+        `
+            <head></head>
+            <body>
+                <a href="/r1">r1</a>
+                <a href="/r2">r2</a>
+                <a href="/r3">r3</a>
+                <a href="/r4">r4</a>
+                <a href="/r5">r5</a>
+                <a href="/r6">r6</a>
+                <a href="/r7">r7</a>
+                <a href="/r8">r8</a>
+                <a href="/r9">r9</a>
+                <a href="/r10">r10</a>
+                <a href="/r11">r11</a>
+                <a href="/r12">r12</a>
+                <a href="/r13">r13</a>
+                <a href="/r14">r14</a>
+                <a href="/r15">r15</a>
+                <a href="/r16">r16</a>
+                <a href="/r17">r17</a>
+                <a href="/r18">r18</a>
+                <a href="/r19">r19</a>
+                <a href="/r20">r20</a>
+                <a href="/r21">r21</a>
+                <a href="/r22">r22</a>
+                <a href="/r23">r23</a>
+                <a href="/r24">r24</a>
+                <a href="/r25">r25</a>
+                <a href="/r26">r26</a>
+                <a href="/r27">r27</a>
+                <a href="/r28">r28</a>
+                <a href="/r29">r29</a>
+                <a href="/r30">r30</a>
+                <a href="/r31">r31</a>
+                <a href="/r32">r32</a>
+                <a href="/r33">r33</a>
+                <a href="/r34">r34</a>
+                <a href="/r35">r35</a>
+                <a href="/r36">r36</a>
+                <a href="/r37">r37</a>
+            </body>`,
+        "",
+        []string{"/r1", "/r2", "/r3", "/r4", "/r5", "/r6", "/r7", "/r8", "/r9", "/r10",
+            "/r11", "/r12", "/r13", "/r14", "/r15", "/r16", "/r17", "/r18", "/r19", "/r20",
+            "/r21", "/r22", "/r23", "/r24", "/r25", "/r26", "/r27", "/r28", "/r29", "/r30",
+            "/r31", "/r32", "/r33", "/r34", "/r35", "/r36", "/r37"},
+    },
+    {
         "href in different tag than anchor",
         `<head></head>
                <body><div href="/resource1"></div></body>`,
@@ -183,10 +232,10 @@ func TestHtmlScanner_Scan(t *testing.T) {
 
                 switch msg.Type {
                     case crawler.Title:
-                        actualTitle = msg.Content
+                        actualTitle = msg.Content[0]
 
                     case crawler.Link:
-                        actualLinks = append(actualLinks, msg.Content)
+                        actualLinks = append(actualLinks, msg.Content...)
 
                     case crawler.EndOfStream:
                         break loopOverMessages
@@ -212,12 +261,11 @@ func TestHtmlScanner_Scan(t *testing.T) {
     fmt.Printf("Ran %d tests from %d test suites\n", numTestsRan, numTestSuitesRan)
 }
 
-var title = ""
-var lastLink = ""
 
 func benchmarkHtmlScanner_Scan(fileName string, b *testing.B) {
 
-    numLinks := 0
+    var numLinks = 0
+    var title string
 
     scanner := New()
 
@@ -249,11 +297,10 @@ func benchmarkHtmlScanner_Scan(fileName string, b *testing.B) {
 
             switch msg.Type {
             case crawler.Title:
-                title = msg.Content
+                title = msg.Content[0]
 
             case crawler.Link:
-                numLinks++
-                lastLink = msg.Content
+                numLinks = numLinks + len(msg.Content)
 
             case crawler.EndOfStream:
                 break loopOverMessages
@@ -262,8 +309,10 @@ func benchmarkHtmlScanner_Scan(fileName string, b *testing.B) {
 
     }
 
-    fmt.Printf("%d links\n", numLinks)
     close(scanOutputCh)
+
+    _ = title
+    _ = numLinks
 }
 
 func BenchmarkHtmlScanner_Scan_GoReleaseNotes(b *testing.B) {
