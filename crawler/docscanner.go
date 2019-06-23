@@ -1,6 +1,10 @@
 package crawler
 
-import "io"
+import (
+    "fmt"
+    "go.uber.org/zap/zapcore"
+    "io"
+)
 
 type Id string
 
@@ -11,8 +15,21 @@ const (
     EndOfStream
 )
 
+func (mt MessageType) String() string {
+    switch (mt) {
+    case Title:
+        return "Title"
+    case Link:
+        return "Link"
+    case EndOfStream:
+        return "EndOfStream"
+    default:
+        return fmt.Sprintf("%d", int(mt))
+    }
+}
+
 type Message struct {
-    Content string
+    Content []string
     DocId   Id
     Type	MessageType
 }
@@ -34,9 +51,22 @@ type DocScanner interface {
 
 func EndOfStreamMsg(docId Id) Message {
     return Message {
-        Content: "",
+        Content: nil,
         DocId: docId,
         Type: EndOfStream,
     }
 }
 
+func (msg Message) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+    _ = enc.AddArray("Content", zapcore.ArrayMarshalerFunc(func(arr zapcore.ArrayEncoder) error {
+        for i := range msg.Content {
+            arr.AppendString(msg.Content[i])
+        }
+        return nil
+    }))
+
+    enc.AddString("DocId", string(msg.DocId))
+    enc.AddString("Type", msg.Type.String())
+
+    return nil
+}

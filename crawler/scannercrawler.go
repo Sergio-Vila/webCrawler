@@ -99,51 +99,54 @@ loopOverDocScannerMessages:
         }
 
         switch msg.Type {
-        case Title:
-            doc.Title = msg.Content
-            c.logger.Debug("Got title from DocScanner",
-                zap.String("DocId", string(doc.DocId)),
-                zap.String("Title", doc.Title))
-
-        case Link:
-            linkedId, linkHasId := idFromLoc(Loc(msg.Content), msg.DocId)
-            if !linkHasId {
-                c.logger.Debug("Got link - Ignored by 'idFromLoc' function",
+            case Title:
+                doc.Title = msg.Content[0]
+                c.logger.Debug("Got title from DocScanner",
                     zap.String("DocId", string(doc.DocId)),
-                    zap.String("Link location", msg.Content))
-                continue loopOverDocScannerMessages
-            }
+                    zap.String("Title", doc.Title))
 
-            doc.Links = append(doc.Links, linkedId)
+            case Link:
+            loopOverLinks:
+                for _, link := range msg.Content {
+                    linkedId, linkHasId := idFromLoc(Loc(link), msg.DocId)
+                    if !linkHasId {
+                        c.logger.Debug("Got link - Ignored by 'idFromLoc' function",
+                            zap.String("DocId", string(doc.DocId)),
+                            zap.String("Link location", string(link)))
+                        continue loopOverLinks
+                    }
 
-            if _, alreadyScanned := c.crawled[linkedId]; alreadyScanned {
-                c.logger.Debug("Got link - Already scanned",
-                    zap.String("DocId", string(doc.DocId)),
-                    zap.String("Link location", msg.Content),
-                    zap.String("Linked DocId", string(linkedId)))
+                    doc.Links = append(doc.Links, linkedId)
 
-                continue loopOverDocScannerMessages
-            }
+                    if _, alreadyScanned := c.crawled[linkedId]; alreadyScanned {
+                        c.logger.Debug("Got link - Already scanned",
+                            zap.String("DocId", string(doc.DocId)),
+                            zap.String("Link location", string(link)),
+                            zap.String("Linked DocId", string(linkedId)))
 
-            c.crawled[linkedId] = DefaultDocInfo(linkedId)
-            docIdsOutCh <- linkedId
+                        continue loopOverLinks
+                    }
 
-            c.logger.Debug("Got link - Requested",
-                zap.String("DocId", string(doc.DocId)),
-                zap.String("Link location", msg.Content))
+                    c.crawled[linkedId] = DefaultDocInfo(linkedId)
+                    docIdsOutCh <- linkedId
 
-            pendingDocs++
+                    c.logger.Debug("Got link - Requested",
+                        zap.String("DocId", string(doc.DocId)),
+                        zap.String("Link location", string(link)))
 
-        case EndOfStream:
-            doc.completed = true
-            outCh <- *c.crawled[msg.DocId]
+                    pendingDocs++
+                }
 
-            c.logger.Sync()
+            case EndOfStream:
+                doc.completed = true
+                outCh <- *c.crawled[msg.DocId]
 
-            pendingDocs--
-            if pendingDocs == 0 {
-                break loopOverDocScannerMessages
-            }
+                c.logger.Sync()
+
+                pendingDocs--
+                if pendingDocs == 0 {
+                    break loopOverDocScannerMessages
+                }
         }
     }
 }
