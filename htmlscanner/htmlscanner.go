@@ -17,14 +17,18 @@ func New() crawler.DocScanner {
 
 func (*HtmlScanner) Scan(r crawler.DocReader, outCh chan crawler.Message) {
     tokenizer := html.NewTokenizer(r.Reader)
-    logger, _ := zap.NewProduction()
+    logger, _ := zap.NewProduction(
+        zap.Fields(zap.String("DocId", string(r.DocId))),
+    )
 
     findTitle(tokenizer, r.DocId, outCh, logger)
     findLinks(tokenizer, r.DocId, outCh, logger)
 
-    outCh <- crawler.EndOfStreamMsg(r.DocId)
+    eos := crawler.EndOfStreamMsg(r.DocId)
 
-    logger.Debug("End Of Stream", zap.String("Doc", string(r.DocId)))
+    logger.Debug("Send EoS", zap.Object("Msg", eos))
+    outCh <- eos
+
     logger.Sync()
 
     // Read until end of file and close
@@ -42,15 +46,17 @@ loopOverTokens:
                     if tokenType := token.Next(); tokenType == html.TextToken {
                         title := string(token.Text())
 
-                        logger.Debug("Found title",
-                            zap.String("Doc", string(docId)),
-                            zap.String("Title", title))
+                        logger.Debug("Found title", zap.String("Title", title))
 
-                        outCh <- crawler.Message{
+                        msg := crawler.Message{
                             Content: []string{title},
                             DocId: docId,
                             Type: crawler.Title,
                         }
+
+                        logger.Debug("Send title", zap.Object("Msg", msg))
+
+                        outCh <- msg
 
                         break loopOverTokens
                     }
@@ -61,6 +67,7 @@ loopOverTokens:
 
             case html.EndTagToken:
                 if tagNameEquals("head", token) {
+                    logger.Debug("Reached </head>")
                     break loopOverTokens
                 }
         }
@@ -87,20 +94,21 @@ loopOverTokens:
                         if areEqual(key, "href") {
                             link := string(val)
 
-                            logger.Debug("Found link",
-                                zap.String("Doc", string(docId)),
-                                zap.String("Link", link))
+                            logger.Debug("Found link", zap.String("Link", link))
 
                             if len(unsentLinks) < linksPerMsg {
                                 unsentLinks = append(unsentLinks, link)
                             }
 
                             if len(unsentLinks) == linksPerMsg {
-                                linksCh <- crawler.Message{
+                                msg := crawler.Message{
                                     Content: unsentLinks,
                                     DocId:   docId,
                                     Type:    crawler.Link,
                                 }
+
+                                logger.Debug("Send links", zap.Object("Msg", msg))
+                                linksCh <- msg
 
                                 unsentLinks = make([]string, 0, linksPerMsg)
                             }
@@ -115,6 +123,7 @@ loopOverTokens:
 
             case html.EndTagToken:
                 if tagNameEquals("body", token) {
+                    logger.Debug("Reached </body>")
                     break loopOverTokens
                 }
         }
@@ -122,10 +131,15 @@ loopOverTokens:
     }
 
     if len(unsentLinks) != 0 {
-        linksCh <- crawler.Message{
+
+        msg := crawler.Message{
             Content: unsentLinks,
             DocId:   docId,
             Type:    crawler.Link,
         }
+
+        logger.Debug("Send links", zap.Object("Msg", msg))
+
+        linksCh <- msg
     }
 }
