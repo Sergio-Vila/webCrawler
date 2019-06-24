@@ -3,6 +3,7 @@ package sitemap
 import (
     "errors"
     "fmt"
+    "io"
     "net/http"
     "net/url"
     "strings"
@@ -16,8 +17,8 @@ const docOutputChSize = 1024
 
 type SiteMap struct {
     crawler crawler.Crawler
-    docs map [crawler.Id] *crawler.DocInfo
-    root crawler.Id
+    docs map [crawler.DocId] *crawler.DocInfo
+    root crawler.DocId
 }
 
 func NewSiteMap() *SiteMap {
@@ -28,48 +29,48 @@ func NewSiteMap() *SiteMap {
     }
 
     return &SiteMap{
-        crawler.New(htmlscanner.New(), pool),
-        make(map [crawler.Id] *crawler.DocInfo),
+        crawler.New(
+            htmlscanner.New(),
+            crawler.RequesterFunc(addHttpRequest),
+            crawler.ResolverFunc(idFromLocator),
+            pool,
+        ),
+        make(map [crawler.DocId] *crawler.DocInfo),
         "",
     }
 }
 
-func addHttpRequest(requestedUrlStr crawler.Id) (crawler.DocReader, error) {
+func addHttpRequest(requestedUrlStr crawler.DocId) (io.ReadCloser, error) {
+    var emptyReadCloser io.ReadCloser
 
     requestedUrl, err := url.Parse(string(requestedUrlStr))
     if err != nil {
-        return crawler.DocReader{}, err
+        return emptyReadCloser, err
     }
 
     if !requestedUrl.IsAbs() {
-        return crawler.DocReader{}, errors.New("URL to request should be absolute")
+        return emptyReadCloser, errors.New("URL to request should be absolute")
     }
 
     resp, err := http.Get(requestedUrl.String())
     if err != nil {
-        return crawler.DocReader{}, err
+        return emptyReadCloser, err
     }
 
-    id := idFromAbsUrl(requestedUrl)
-
-    return crawler.DocReader{
-        id,
-        resp.Body,
-    }, nil
+    return resp.Body, nil
 }
 
 func (sm *SiteMap) ProduceFrom(startingPoint string) error {
 
     docInfoCh := make(chan crawler.DocInfo, docOutputChSize)
 
-    go sm.crawler.Crawl(startingPoint, docInfoCh, addHttpRequest, idFromLocator)
-
     startingPointUrl, err := url.ParseRequestURI(startingPoint)
     if err != nil {
         return errors.New("Starting point URL " + startingPoint + " is not valid")
     }
-
     sm.root = idFromAbsUrl(startingPointUrl)
+
+    go sm.crawler.Crawl(sm.root, docInfoCh)
 
 loopOverCompletedPages:
     for {
@@ -87,8 +88,8 @@ loopOverCompletedPages:
 }
 
 func (sm *SiteMap) print(
-    fromPageId crawler.Id,
-    visited map [crawler.Id] bool,
+    fromPageId crawler.DocId,
+    visited map [crawler.DocId] bool,
     spacing string,
     level int) {
 
@@ -112,5 +113,5 @@ func (sm *SiteMap) Print() {
         " A line starting with a - character indicates the links of the page are just below it.\n" +
         " A line starting with a * character indicates the page is already in the output and links\n" +
         " won't be printed again.\n\n\n")
-    sm.print(sm.root, make(map[crawler.Id]bool), " ", 0)
+    sm.print(sm.root, make(map[crawler.DocId]bool), " ", 0)
 }

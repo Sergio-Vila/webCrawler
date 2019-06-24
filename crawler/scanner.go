@@ -6,7 +6,7 @@ import (
     "io"
 )
 
-type Id string
+type DocId string
 
 type MessageType int
 const (
@@ -30,16 +30,16 @@ func (mt MessageType) String() string {
 
 type Message struct {
     Content []string
-    DocId   Id
-    Type	MessageType
+    DocId   DocId
+    Type    MessageType
 }
 
 type DocReader struct {
-    DocId 	Id
-    Reader 	io.ReadCloser
+    DocId  DocId
+    Reader io.ReadCloser
 }
 
-type DocScanner interface {
+type Scanner interface {
     // Scans a document and looks for its title, and for
     // links to other documents.
     //
@@ -49,7 +49,7 @@ type DocScanner interface {
     Scan(docReader DocReader, outCh chan Message)
 }
 
-func EndOfStreamMsg(docId Id) Message {
+func EndOfStreamMsg(docId DocId) Message {
     return Message {
         Content: nil,
         DocId: docId,

@@ -3,13 +3,13 @@ package crawler
 type Loc string
 
 type DocInfo struct {
-    DocId     Id
+    DocId     DocId
     Title     string
-    Links     []Id
+    Links     []DocId
     completed bool
 }
 
-func DefaultDocInfo(DocId Id) *DocInfo {
+func DefaultDocInfo(DocId DocId) *DocInfo {
     return &DocInfo {
         DocId: DocId,
         Title: "Untitled document",
@@ -24,8 +24,6 @@ type Crawler interface {
     // 'getDocReader' function should have the logic to get a document from its id.
     // 'idFromLoc' function should have the logic to get a document id from the link value.
     Crawl(
-        startId string,
-        outCh chan DocInfo,
-        getDocReader func(docId Id) (DocReader, error),
-        idFromLoc func (locator Loc, fromId Id) (id Id, hasId bool))
+        startId DocId,
+        outCh chan DocInfo)
 }

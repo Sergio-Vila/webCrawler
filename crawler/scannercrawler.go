@@ -8,49 +8,60 @@ import (
 const docRequestsBufferSize = 1024
 
 type ScannerCrawler struct {
-    pool threadpool.Pool
-    docScanner  DocScanner
-    crawled     map [Id] *DocInfo
-    logger		*zap.Logger
+    pool       threadpool.Pool
+    docScanner Scanner
+    requester  Requester
+    resolver   Resolver
+    crawled    map [DocId] *DocInfo
+    logger     *zap.Logger
 }
 
-func New(docScanner DocScanner, pool threadpool.Pool) Crawler {
+func New(
+    docScanner Scanner,
+    requester Requester,
+    resolver Resolver,
+    pool threadpool.Pool) Crawler {
+
     logger, _ := zap.NewProduction()
 
-    return &ScannerCrawler{pool, docScanner, make(map [Id] *DocInfo), logger}
+    return &ScannerCrawler{
+        pool,
+        docScanner,
+        requester,
+        resolver,
+        make(map [DocId] *DocInfo),
+        logger,
+    }
 }
 
 func (c ScannerCrawler) Crawl(
-    startId string,
-    outCh chan DocInfo,
-    getDocReader func(docId Id) (DocReader, error),
-    idFromLoc func (locator Loc, fromId Id) (id Id, hasId bool)) {
+    startId DocId,
+    outCh chan DocInfo) {
 
     scanResCh := make(chan Message, docRequestsBufferSize)
-    docIdsCh := make(chan Id, docRequestsBufferSize)
+    docIdsCh := make(chan DocId, docRequestsBufferSize)
 
-    c.logger.Info("Crawl started", zap.String("Root page", startId))
+    c.logger.Info("Crawl started", zap.String("Root page", string(startId)))
 
-    go c.produceDocs(docIdsCh, scanResCh, getDocReader)
+    go c.produceDocs(docIdsCh, scanResCh)
 
-    docIdsCh <- Id(startId)
+    docIdsCh <- DocId(startId)
 
-    c.consumeDocs(scanResCh, outCh, idFromLoc, docIdsCh)
+    c.consumeDocs(scanResCh, outCh, docIdsCh)
 
-    c.logger.Debug("Crawl stopping", zap.String("Root page", startId))
+    c.logger.Debug("Crawl stopping", zap.String("Root page", string(startId)))
 
     close(outCh)
     close(docIdsCh)
     close(scanResCh)
     c.pool.Stop()
 
-    c.logger.Info("Crawl stopped", zap.String("Root page", startId))
+    c.logger.Info("Crawl stopped", zap.String("Root page", string(startId)))
 }
 
 func (c ScannerCrawler) produceDocs(
-    docIdsInCh chan Id,
-    scanResCh chan Message,
-    getDocReader func(docId Id) (DocReader, error)) {
+    docIdsInCh chan DocId,
+    scanResCh chan Message) {
 
 loopOverNewDocIds:
     for {
@@ -59,17 +70,22 @@ loopOverNewDocIds:
             break loopOverNewDocIds
         }
 
-        c.pool.Run("DocScanner for " + string(nextDocId), func () {
+        c.pool.Run("Scanner for " + string(nextDocId), func () {
             c.logger.Debug("Running task for document scan",
                 zap.String("DocId", string(nextDocId)))
 
-            nextDoc, err := getDocReader(nextDocId)
+            nextDoc, err := c.requester.Request(nextDocId)
             if err != nil {
-                c.logger.Error("Error on getting DocReader",
+                c.logger.Error("Error while requesting doc",
                     zap.String("DocId", string(nextDocId)),
                     zap.Error(err))
             } else {
-                c.docScanner.Scan(nextDoc, scanResCh)
+                nextDocReader := DocReader{
+                    DocId: nextDocId,
+                    Reader: nextDoc,
+                }
+
+                c.docScanner.Scan(nextDocReader, scanResCh)
             }
 
             c.logger.Info("Finished task for document scan",
@@ -83,8 +99,7 @@ loopOverNewDocIds:
 func (c ScannerCrawler) consumeDocs(
     scanResInCh chan Message,
     outCh chan DocInfo,
-    idFromLoc func (locator Loc, fromId Id) (id Id, hasId bool),
-    docIdsOutCh chan Id) {
+    docIdsOutCh chan DocId) {
 
     pendingDocs := 1
 
@@ -101,14 +116,14 @@ loopOverDocScannerMessages:
         switch msg.Type {
             case Title:
                 doc.Title = msg.Content[0]
-                c.logger.Debug("Got title from DocScanner",
+                c.logger.Debug("Got title from Scanner",
                     zap.String("DocId", string(doc.DocId)),
                     zap.String("Title", doc.Title))
 
             case Link:
             loopOverLinks:
                 for _, link := range msg.Content {
-                    linkedId, linkHasId := idFromLoc(Loc(link), msg.DocId)
+                    linkedId, linkHasId := c.resolver.Resolve(Loc(link), msg.DocId)
                     if !linkHasId {
                         c.logger.Debug("Got link - Ignored by 'idFromLoc' function",
                             zap.String("DocId", string(doc.DocId)),

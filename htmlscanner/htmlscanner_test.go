@@ -211,7 +211,7 @@ func TestHtmlScanner_Scan(t *testing.T) {
 
         for i, test := range testSuite.tests {
 
-            docId := crawler.Id(fmt.Sprintf("DOC_ID_%d", i))
+            docId := crawler.DocId(fmt.Sprintf("DOC_ID_%d", i))
 
             scanOutputCh := make(chan crawler.Message)
 
@@ -283,7 +283,7 @@ func benchmarkHtmlScanner_Scan(fileName string, b *testing.B) {
         numLinks = 0
 
         docReader := crawler.DocReader {
-            DocId: crawler.Id(fileName),
+            DocId: crawler.DocId(fileName),
             Reader: ioutil.NopCloser(bytes.NewReader(fileStr)),
         }
 

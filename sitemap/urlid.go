@@ -5,7 +5,7 @@ import (
     "webCrawler/crawler"
 )
 
-func idFromAbsUrl(url *url.URL) crawler.Id {
+func idFromAbsUrl(url *url.URL) crawler.DocId {
 
     // Remove the elements of the URL that could be different for
     // the same page
@@ -21,10 +21,10 @@ func idFromAbsUrl(url *url.URL) crawler.Id {
         url.Path = url.Path[:len(url.Path)-1]
     }
 
-    return crawler.Id(url.String())
+    return crawler.DocId(url.String())
 }
 
-func idFromLocator(locator crawler.Loc, from crawler.Id) (id crawler.Id, idIsValid bool) {
+func idFromLocator(locator crawler.Loc, from crawler.DocId) (id crawler.DocId, idIsValid bool) {
     parentUrl, parentUrlError := url.ParseRequestURI(string(from))
     locatorAbsUrl, locatorUrlError := parentUrl.Parse(string(locator))
 

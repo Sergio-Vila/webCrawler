@@ -11,7 +11,7 @@ const linksPerMsg = 20
 
 type HtmlScanner struct {}
 
-func New() crawler.DocScanner {
+func New() crawler.Scanner {
     return &HtmlScanner{}
 }
 
@@ -36,7 +36,7 @@ func (*HtmlScanner) Scan(r crawler.DocReader, outCh chan crawler.Message) {
     r.Reader.Close()
 }
 
-func findTitle(token *html.Tokenizer, docId crawler.Id, outCh chan crawler.Message, logger *zap.Logger) {
+func findTitle(token *html.Tokenizer, docId crawler.DocId, outCh chan crawler.Message, logger *zap.Logger) {
 
 loopOverTokens:
     for {
@@ -75,7 +75,7 @@ loopOverTokens:
 
 }
 
-func findLinks(token *html.Tokenizer, docId crawler.Id, linksCh chan crawler.Message, logger *zap.Logger) {
+func findLinks(token *html.Tokenizer, docId crawler.DocId, linksCh chan crawler.Message, logger *zap.Logger) {
 
     unsentLinks := make([]string, 0, linksPerMsg)
 
